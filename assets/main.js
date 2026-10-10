@@ -3047,7 +3047,7 @@ extractCurrentEl.addEventListener("change", () => syncExtractDestination(false))
 extractCustomEl.addEventListener("change", () => syncExtractDestination(true));
 convertBtn.addEventListener("click", () => {
   const item = singleSelected();
-  if (item && isPkgPackage(item)) openConvertDialog(item);
+  if (item && !item.path.startsWith("smb://") && (isPkgPackage(item) || item.type === "d")) openConvertDialog(item);
 });
 convertCancelBtn.addEventListener("click", closeConvertDialog);
 convertApplyBtn.addEventListener("click", submitConvertDialog);
