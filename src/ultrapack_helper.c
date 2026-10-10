@@ -192,9 +192,28 @@ static int ping_helper(int fd) {
   helper_frame_t frame;
   char payload[1024];
   int ret;
-  if(send_frame(fd, WUP_MSG_PING, 0, NULL, 0) || wait_readable(fd, 1000) != 1) return -1;
+  if(send_frame(fd, WUP_MSG_PING, 0, NULL, 0)) return -1;
+  ret = wait_readable(fd, 1000);
+  if(ret != 1) {
+    if(ret == 0) errno = ETIMEDOUT;
+    else if(ret > 0 || !errno) errno = EIO;
+    return -1;
+  }
   ret = recv_frame(fd, &frame, payload, sizeof(payload));
-  return ret == 1 && frame.type == WUP_MSG_PONG ? 0 : -1;
+  if(ret == 0) {
+    errno = ECONNRESET;
+    return -1;
+  }
+  if(ret == -2) {
+    errno = ETIMEDOUT;
+    return -1;
+  }
+  if(ret < 0) return -1;
+  if(frame.type != WUP_MSG_PONG) {
+    errno = EPROTO;
+    return -1;
+  }
+  return 0;
 }
 
 int ultrapack_helper_probe(void) {
