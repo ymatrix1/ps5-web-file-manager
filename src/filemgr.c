@@ -1778,15 +1778,17 @@ api_convert(struct MHD_Connection *conn, const char *body, size_t body_size) {
     result = send_json_error(conn, MHD_HTTP_BAD_REQUEST, "unsupported format");
     goto done;
   }
-  if(lstat(path, &st) || !S_ISREG(st.st_mode)) {
-    result = send_json_error_detail(conn, MHD_HTTP_NOT_FOUND, "package file not found",
+  if(lstat(path, &st) || (!S_ISREG(st.st_mode) && !S_ISDIR(st.st_mode))) {
+    result = send_json_error_detail(conn, MHD_HTTP_NOT_FOUND, "package file or folder not found",
                                    "file_not_found", path);
     goto done;
   }
   if(ultrapack_helper_autostart()) {
+    char reason[96];
+    snprintf(reason, sizeof(reason), "probe failed: %s", strerror(errno));
     result = send_json_error_detail(conn, MHD_HTTP_SERVICE_UNAVAILABLE,
                                    "UltraPack helper is not running",
-                                   "ultrapack_helper_not_running", NULL);
+                                   "ultrapack_helper_not_running", reason);
     goto done;
   }
   {

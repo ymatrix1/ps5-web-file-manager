@@ -1871,8 +1871,8 @@ function renderExtractButton(items, locked) {
 }
 
 function renderConvertButton(items, locked) {
-  const pkgs = items.filter(isPkgPackage).filter(item => !item.path.startsWith("smb://"));
-  convertBtn.hidden = pkgs.length !== 1;
+  const pkgs = items.filter(item => isPkgPackage(item) || item.type === "d").filter(item => !item.path.startsWith("smb://"));
+  convertBtn.hidden = pkgs.length !== 1 || items.length !== 1;
   if (pkgs.length !== 1) {
     convertBtn.title = "";
     convertBtn.disabled = true;
@@ -3047,7 +3047,7 @@ extractCurrentEl.addEventListener("change", () => syncExtractDestination(false))
 extractCustomEl.addEventListener("change", () => syncExtractDestination(true));
 convertBtn.addEventListener("click", () => {
   const item = singleSelected();
-  if (item && isPkgPackage(item)) openConvertDialog(item);
+  if (item && !item.path.startsWith("smb://") && (isPkgPackage(item) || item.type === "d")) openConvertDialog(item);
 });
 convertCancelBtn.addEventListener("click", closeConvertDialog);
 convertApplyBtn.addEventListener("click", submitConvertDialog);

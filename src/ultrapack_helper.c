@@ -192,72 +192,44 @@ static int ping_helper(int fd) {
   helper_frame_t frame;
   char payload[1024];
   int ret;
-  if(send_frame(fd, WUP_MSG_PING, 0, NULL, 0) || wait_readable(fd, 1000) != 1) return -1;
+  if(send_frame(fd, WUP_MSG_PING, 0, NULL, 0)) return -1;
+  ret = wait_readable(fd, 1000);
+  if(ret != 1) {
+    if(ret == 0) errno = ETIMEDOUT;
+    else if(ret > 0 || !errno) errno = EIO;
+    return -1;
+  }
   ret = recv_frame(fd, &frame, payload, sizeof(payload));
-  return ret == 1 && frame.type == WUP_MSG_PONG ? 0 : -1;
+  if(ret == 0) {
+    errno = ECONNRESET;
+    return -1;
+  }
+  if(ret == -2) {
+    errno = ETIMEDOUT;
+    return -1;
+  }
+  if(ret < 0) return -1;
+  if(frame.type != WUP_MSG_PONG) {
+    errno = EPROTO;
+    return -1;
+  }
+  return 0;
 }
 
 int ultrapack_helper_probe(void) {
   int fd = connect_helper();
   if(fd < 0) return -1;
   int ret = ping_helper(fd);
+  int saved = errno;
   close(fd);
+  errno = saved;
   return ret;
 }
 
-#ifndef __linux__
-static int ultrapack_send_elf(const char *path) {
-  struct sockaddr_in address;
-  struct timeval timeout = {1, 0};
-  char buffer[65536];
-  int file_fd = -1;
-  int socket_fd = -1;
-  int result = -1;
-
-  if((file_fd = open(path, O_RDONLY)) < 0) return -1;
-  if(read(file_fd, buffer, 4) != 4 || memcmp(buffer, "\x7f" "ELF", 4)) {
-    errno = ENOEXEC;
-    goto done;
-  }
-  if(lseek(file_fd, 0, SEEK_SET) < 0) goto done;
-  if((socket_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) goto done;
-  setsockopt(socket_fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
-  memset(&address, 0, sizeof(address));
-  address.sin_family = AF_INET;
-  address.sin_port = htons(WUP_ELFLDR_PORT);
-  address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-  if(connect(socket_fd, (struct sockaddr *)&address, sizeof(address))) goto done;
-
-  while(1) {
-    ssize_t count = read(file_fd, buffer, sizeof(buffer));
-    if(count < 0 && errno == EINTR) continue;
-    if(count < 0) goto done;
-    if(!count) break;
-    if(send_all(socket_fd, buffer, (size_t)count)) goto done;
-  }
-  shutdown(socket_fd, SHUT_WR);
-  result = 0;
-
-done:
-  if(socket_fd >= 0) close(socket_fd);
-  if(file_fd >= 0) close(file_fd);
-  return result;
-}
-#endif
-
+/* Probe only. Never launch the helper from inside the web server: sending an
+ * ELF to elfldr from a request thread has been observed to take down
+ * web-file-mgr itself. The helper is started separately (elfldr port 9021). */
 int ultrapack_helper_autostart(void) {
-  if(!ultrapack_helper_probe()) return 0;
-#ifndef __linux__
-  struct stat st;
-  if(!stat(WUP_HELPER_ELF, &st) && S_ISREG(st.st_mode)) {
-    if(!ultrapack_send_elf(WUP_HELPER_ELF)) {
-      for(int i = 0; i < 10; i++) {
-        usleep(100000); /* 100ms */
-        if(!ultrapack_helper_probe()) return 0;
-      }
-    }
-  }
-#endif
   return ultrapack_helper_probe();
 }
 
