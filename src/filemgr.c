@@ -1784,9 +1784,11 @@ api_convert(struct MHD_Connection *conn, const char *body, size_t body_size) {
     goto done;
   }
   if(ultrapack_helper_autostart()) {
+    char reason[96];
+    snprintf(reason, sizeof(reason), "probe failed: %s", strerror(errno));
     result = send_json_error_detail(conn, MHD_HTTP_SERVICE_UNAVAILABLE,
                                    "UltraPack helper is not running",
-                                   "ultrapack_helper_not_running", NULL);
+                                   "ultrapack_helper_not_running", reason);
     goto done;
   }
   {
